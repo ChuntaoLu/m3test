@@ -1,0 +1,183 @@
+This program tests the runtime memory footprint m3 metrics when there is a large number of tags.
+
+* Parameters
+** metric cardinality
+| city         | 500 |
+| device       | 100 |
+| counter name | 10  |
+
+** number of operations
+Assume:
+- a server serves 100 requests per second
+- each request takes 100ms to finish
+- each request emits 5 counter metrics
+- server runs for 2 hours
+
+total operations: 2 * 60 * 60 * 100 * 5 = 3,600,000
+
+** simulation
+We loop 3,600,000 times to emit metrics with randomly chose tags and counter names, and then dump heap profile.
+
+Concurrency here doesn't really matter much regarding heap profile, we spin 100 concurrent goroutines assuming each request is handled in its own goroutine.
+Each goroutine does 100ms worth of work (sleep) beside emitting metrics.
+
+* Test Result
+#+BEGIN_SRC shell :results output
+go build
+./m3test -n 3600 # unit here is 1000
+go tool pprof -top -nodecount=10 -cum m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_space
+Time: Feb 19, 2019 at 4:49pm (PST)
+Showing nodes accounting for 142.02MB, 44.74% of 317.43MB total
+Dropped 16 nodes (cum <= 1.59MB)
+Showing top 10 nodes out of 48
+      flat  flat%   sum%        cum   cum%
+      14MB  4.41%  4.41%   269.32MB 84.84%  main.main.func1
+   17.01MB  5.36%  9.77%   188.02MB 59.23%  github.com/uber-go/tally.(*scope).Counter
+   17.50MB  5.51% 15.28%   155.51MB 48.99%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 15.28%   138.01MB 43.48%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+   93.51MB 29.46% 44.74%   138.01MB 43.48%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 44.74%       86MB 27.09%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 44.74%    61.80MB 19.47%  github.com/uber-go/tally.(*scope).Tagged
+         0     0% 44.74%    42.50MB 13.39%  github.com/uber-go/tally.(*counter).cachedReport
+         0     0% 44.74%    42.50MB 13.39%  github.com/uber-go/tally.(*scope).cachedReport
+         0     0% 44.74%    42.50MB 13.39%  github.com/uber-go/tally.(*scope).reportLoop
+#+end_example
+
+The above output is amount of heap in-use, the RSS heap size (in-use + idle) goes up to 700MB during the test run.
+
+By zooming into the =Counter=, it shows that majority of the memory is spent by =cachedReporter= allocating counters.
+#+BEGIN_SRC shell :results output
+go tool pprof -list=Counter m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Total: 317.43MB
+ROUTINE ======================== github.com/uber-go/tally.(*scope).Counter in /Users/lu/gocode/pkg/mod/github.com/uber-go/tally@v3.3.7+incompatible/scope.go
+   17.01MB   188.02MB (flat, cum) 59.23% of Total
+         .          .    283:		s.cm.Lock()
+         .          .    284:		val, ok = s.counters[name]
+         .          .    285:		if !ok {
+         .          .    286:			var cachedCounter CachedCount
+         .          .    287:			if s.cachedReporter != nil {
+         .   155.51MB    288:				cachedCounter = s.cachedReporter.AllocateCounter(
+         .          .    289:					s.fullyQualifiedName(name), s.tags,
+         .          .    290:				)
+         .          .    291:			}
+         .    15.50MB    292:			val = newCounter(cachedCounter)
+   17.01MB    17.01MB    293:			s.counters[name] = val
+         .          .    294:		}
+         .          .    295:		s.cm.Unlock()
+         .          .    296:	}
+         .          .    297:	return val
+         .          .    298:}
+ROUTINE ======================== github.com/uber-go/tally.newCounter in /Users/lu/gocode/pkg/mod/github.com/uber-go/tally@v3.3.7+incompatible/stats.go
+   15.50MB    15.50MB (flat, cum)  4.88% of Total
+         .          .     61:	curr        int64
+         .          .     62:	cachedCount CachedCount
+         .          .     63:}
+         .          .     64:
+         .          .     65:func newCounter(cachedCount CachedCount) *counter {
+   15.50MB    15.50MB     66:	return &counter{cachedCount: cachedCount}
+         .          .     67:}
+         .          .     68:
+         .          .     69:func (c *counter) Inc(v int64) {
+         .          .     70:	atomic.AddInt64(&c.curr, v)
+         .          .     71:}
+ROUTINE ======================== github.com/uber-go/tally/m3.(*reporter).AllocateCounter in /Users/lu/gocode/pkg/mod/github.com/uber-go/tally@v3.3.7+incompatible/m3/reporter.go
+   17.50MB   155.51MB (flat, cum) 48.99% of Total
+         .          .    245:
+         .          .    246:// AllocateCounter implements tally.CachedStatsReporter.
+         .          .    247:func (r *reporter) AllocateCounter(
+         .          .    248:	name string, tags map[string]string,
+         .          .    249:) tally.CachedCount {
+   17.50MB   155.51MB    250:	return r.allocateCounter(name, tags)
+         .          .    251:}
+         .          .    252:
+         .          .    253:func (r *reporter) allocateCounter(
+         .          .    254:	name string, tags map[string]string,
+         .          .    255:) cachedMetric {
+ROUTINE ======================== github.com/uber-go/tally/m3.(*reporter).allocateCounter in /Users/lu/gocode/pkg/mod/github.com/uber-go/tally@v3.3.7+incompatible/m3/reporter.go
+         0   138.01MB (flat, cum) 43.48% of Total
+         .          .    251:}
+         .          .    252:
+         .          .    253:func (r *reporter) allocateCounter(
+         .          .    254:	name string, tags map[string]string,
+         .          .    255:) cachedMetric {
+         .   138.01MB    256:	counter := r.newMetric(name, tags, counterType)
+         .          .    257:	size := r.calculateSize(counter)
+         .          .    258:	return cachedMetric{counter, r, size}
+         .          .    259:}
+         .          .    260:
+         .          .    261:// AllocateGauge implements tally.CachedStatsReporter.
+#+end_example
+
+It is also worth noting that when creating subscopes tally pre-allocates memory for different metric types.
+It might be better to allocate memory on demand because it is possible that a subscope might only emit one kind of metrics (e.g. counter in our example).
+#+BEGIN_SRC shell :results output
+go tool pprof -list=subscope m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Total: 317.43MB
+ROUTINE ======================== github.com/uber-go/tally.(*scope).subscope in /Users/lu/gocode/pkg/mod/github.com/uber-go/tally@v3.3.7+incompatible/scope.go
+   29.29MB    31.29MB (flat, cum)  9.86% of Total
+         .          .    385:	return s.subscope(s.fullyQualifiedName(prefix), nil)
+         .          .    386:}
+         .          .    387:
+         .          .    388:func (s *scope) subscope(prefix string, immutableTags map[string]string) Scope {
+         .          .    389:	immutableTags = mergeRightTags(s.tags, immutableTags)
+         .        2MB    390:	key := scopeRegistryKey(prefix, immutableTags)
+         .          .    391:
+         .          .    392:	s.registry.RLock()
+         .          .    393:	existing, ok := s.registry.subscopes[key]
+         .          .    394:	if ok {
+         .          .    395:		s.registry.RUnlock()
+         .          .    396:		return existing
+         .          .    397:	}
+         .          .    398:	s.registry.RUnlock()
+         .          .    399:
+         .          .    400:	s.registry.Lock()
+         .          .    401:	defer s.registry.Unlock()
+         .          .    402:
+         .          .    403:	existing, ok = s.registry.subscopes[key]
+         .          .    404:	if ok {
+         .          .    405:		return existing
+         .          .    406:	}
+         .          .    407:
+         .          .    408:	subscope := &scope{
+         .          .    409:		separator: s.separator,
+         .          .    410:		prefix:    prefix,
+         .          .    411:		// NB(prateek): don't need to copy the tags here,
+         .          .    412:		// we assume the map provided is immutable.
+         .          .    413:		tags:           immutableTags,
+         .          .    414:		reporter:       s.reporter,
+         .          .    415:		cachedReporter: s.cachedReporter,
+         .          .    416:		baseReporter:   s.baseReporter,
+         .          .    417:		defaultBuckets: s.defaultBuckets,
+         .          .    418:		sanitizer:      s.sanitizer,
+         .          .    419:		registry:       s.registry,
+         .          .    420:
+       2MB        2MB    421:		counters:   make(map[string]*counter),
+       1MB        1MB    422:		gauges:     make(map[string]*gauge),
+       3MB        3MB    423:		timers:     make(map[string]*timer),
+   21.51MB    21.51MB    424:		histograms: make(map[string]*histogram),
+         .          .    425:	}
+         .          .    426:
+    1.78MB     1.78MB    427:	s.registry.subscopes[key] = subscope
+         .          .    428:	return subscope
+         .          .    429:}
+         .          .    430:
+         .          .    431:func (s *scope) Capabilities() Capabilities {
+         .          .    432:	if s.baseReporter == nil {
+#+end_example
+
+* Questions
+- [[https://github.com/uber-go/tally/blob/master/reporter.go#L80][tally doc here]] says =Cachedreporter= is more performant, is it regarding throughput?
+- It seems like =CachedReporter= has heavy memory footprint when an application emit metrics with high cardinality of tags, what is a better alternative?
