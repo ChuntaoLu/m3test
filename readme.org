@@ -22,7 +22,7 @@ Concurrency here doesn't really matter much regarding heap profile, we spin 100 
 Each goroutine does 100ms worth of work (sleep) beside emitting metrics.
 
 * Test Result
-#+BEGIN_SRC shell :results output
+#+BEGIN_SRC shell :results output :exports both
 go build
 ./m3test -n 3600 # unit here is 1000
 go tool pprof -top -nodecount=10 -cum m3_3600k.mprof
@@ -51,7 +51,7 @@ Showing top 10 nodes out of 48
 The above output is amount of heap in-use, the RSS heap size (in-use + idle) goes up to 700MB during the test run.
 
 By zooming into the =Counter=, it shows that majority of the memory is spent by =cachedReporter= allocating counters.
-#+BEGIN_SRC shell :results output
+#+BEGIN_SRC shell :results output :exports both
 go tool pprof -list=Counter m3_3600k.mprof
 #+END_SRC
 
@@ -119,7 +119,7 @@ ROUTINE ======================== github.com/uber-go/tally/m3.(*reporter).allocat
 
 It is also worth noting that when creating subscopes tally pre-allocates memory for different metric types.
 It might be better to allocate memory on demand because it is possible that a subscope might only emit one kind of metrics (e.g. counter in our example).
-#+BEGIN_SRC shell :results output
+#+BEGIN_SRC shell :results output :exports both
 go tool pprof -list=subscope m3_3600k.mprof
 #+END_SRC
 
