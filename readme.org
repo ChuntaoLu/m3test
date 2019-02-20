@@ -179,5 +179,5 @@ ROUTINE ======================== github.com/uber-go/tally.(*scope).subscope in /
 #+end_example
 
 * Questions
-- [[https://github.com/uber-go/tally/blob/master/reporter.go#L80][tally doc here]] says =Cachedreporter= is more performant, is it regarding throughput?
+- [[https://github.com/uber-go/tally/blob/master/reporter.go#L80][tally doc here]] says =CachedReporter= is more performant, is it regarding throughput?
 - It seems like =CachedReporter= has heavy memory footprint when an application emit metrics with high cardinality of tags, what is a better alternative?
