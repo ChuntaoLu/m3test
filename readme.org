@@ -192,7 +192,7 @@ scope, closer := tally.NewRootScope(
 )
 #+END_SRC
 
-** without https://github.com/uber-go/tally/pull/95
+** with https://github.com/uber-go/tally/pull/95
 #+BEGIN_SRC shell :results output :exports both
 git diff go.mod
 git diff main.go
