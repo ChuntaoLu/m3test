@@ -177,7 +177,154 @@ ROUTINE ======================== github.com/uber-go/tally.(*scope).subscope in /
          .          .    431:func (s *scope) Capabilities() Capabilities {
          .          .    432:	if s.baseReporter == nil {
 #+end_example
-
 * Questions
 - [[https://github.com/uber-go/tally/blob/master/reporter.go#L80][tally doc here]] says =CachedReporter= is more performant, is it regarding throughput?
 - It seems like =CachedReporter= has heavy memory footprint when an application emit metrics with high cardinality of tags, what is a better alternative?
+* Update
+https://github.com/uber-go/tally/pull/95 adds support to expire metrics and scopes with user defined [[https://github.com/uber-go/tally/pull/95/files#diff-47497ba035375764f5fb117df36284fdR114][ExpiryPeriod]], following code change is made:
+#+BEGIN_SRC go
+scope, closer := tally.NewRootScope(
+        tally.ScopeOptions{
+                CachedReporter: reporter,
+        },
+        tally.ExpiryPeriod: time.duration(2) * time.Second,
+        time.Duration(1000)*time.Millisecond,
+)
+#+END_SRC
+
+** without https://github.com/uber-go/tally/pull/95
+#+BEGIN_SRC shell :results output :exports both
+git diff go.mod
+git diff main.go
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+diff --git a/go.mod b/go.mod
+index 033d370..bb8aa8e 100644
+--- a/go.mod
++++ b/go.mod
+@@ -2,6 +2,6 @@ module github.com/ChuntaoLu/m3test
+
+ require (
+ 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
+-	github.com/uber-go/tally v3.3.7+incompatible
++	github.com/uber-go/tally v3.3.9-0.20190405200941-532cc7e9fa0d+incompatible
+ 	go.uber.org/atomic v1.3.2 // indirect
+ )
+diff --git a/main.go b/main.go
+index d34ceb0..fb9e89a 100644
+--- a/main.go
++++ b/main.go
+@@ -43,6 +43,7 @@ func main() {
+ 		tally.ScopeOptions{
+ 			CachedReporter: reporter,
+ 		},
++		tally.ExpiryPeriod: time.duration(2) * time.Second,
+ 		time.Duration(1000)*time.Millisecond,
+ 	)
+
+#+end_example
+
+*** inuse space
+#+BEGIN_SRC shell :results output :exports both
+go build
+./m3test -n 3600 # unit here is 1000
+go tool pprof -top -nodecount=10 -cum m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_space
+Time: Apr 19, 2019 at 4:22pm (PDT)
+Showing nodes accounting for 155.01MB, 57.23% of 270.84MB total
+Dropped 22 nodes (cum <= 1.35MB)
+Showing top 10 nodes out of 32
+      flat  flat%   sum%        cum   cum%
+   11.50MB  4.25%  4.25%   237.81MB 87.80%  main.main.func1
+   13.51MB  4.99%  9.23%   182.01MB 67.20%  github.com/uber-go/tally.(*scope).Counter
+      21MB  7.75% 16.99%   152.51MB 56.31%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 16.99%   131.51MB 48.56%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+   74.50MB 27.51% 44.50%   131.51MB 48.56%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 44.50%       86MB 31.75%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 44.50%    43.79MB 16.17%  github.com/uber-go/tally.(*scope).Tagged
+         0     0% 44.50%    34.50MB 12.74%  github.com/uber-go/tally/m3.(*resourcePool).getTag
+         0     0% 44.50%    34.50MB 12.74%  github.com/uber-go/tally/m3.newResourcePool.func3
+   34.50MB 12.74% 57.23%    34.50MB 12.74%  github.com/uber-go/tally/m3/thrift.NewMetricTag
+#+end_example
+*** inuse objects
+#+BEGIN_SRC shell :results output :exports both
+go tool pprof -inuse_objects -top -nodecount=10 -cum m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_objects
+Time: Apr 19, 2019 at 4:22pm (PDT)
+Showing nodes accounting for 2696898, 39.90% of 6759003 total
+Dropped 9 nodes (cum <= 33795)
+Showing top 10 nodes out of 45
+      flat  flat%   sum%        cum   cum%
+    105597  1.56%  1.56%    5508321 81.50%  main.main.func1
+     35302  0.52%  2.08%    4896055 72.44%  github.com/uber-go/tally.(*scope).Counter
+    688149 10.18% 12.27%    4336449 64.16%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 12.27%    3648300 53.98%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+   1867850 27.63% 39.90%    3648300 53.98%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 39.90%    2823592 41.78%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 39.90%    1174215 17.37%  github.com/uber-go/tally.(*counter).cachedReport
+         0     0% 39.90%    1174215 17.37%  github.com/uber-go/tally.(*scope).cachedReport
+         0     0% 39.90%    1174215 17.37%  github.com/uber-go/tally.(*scope).reportLoop
+         0     0% 39.90%    1174215 17.37%  github.com/uber-go/tally.(*scope).reportLoopRun
+#+end_example
+
+** without https://github.com/uber-go/tally/pull/95
+*** inuse space
+#+BEGIN_SRC shell :results output :exports both
+go build
+./m3test -n 3600 # unit here is 1000
+go tool pprof -top -nodecount=10 -cum m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_space
+Time: Apr 19, 2019 at 4:25pm (PDT)
+Showing nodes accounting for 147.52MB, 57.76% of 255.42MB total
+Dropped 23 nodes (cum <= 1.28MB)
+Showing top 10 nodes out of 36
+      flat  flat%   sum%        cum   cum%
+   10.50MB  4.11%  4.11%   226.31MB 88.60%  main.main.func1
+   18.01MB  7.05% 11.16%   169.51MB 66.37%  github.com/uber-go/tally.(*scope).Counter
+   10.50MB  4.11% 15.27%   140.01MB 54.82%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 15.27%   129.51MB 50.70%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+   75.50MB 29.56% 44.83%   129.51MB 50.70%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 44.83%       75MB 29.36%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 44.83%    45.29MB 17.73%  github.com/uber-go/tally.(*scope).Tagged
+         0     0% 44.83%       33MB 12.92%  github.com/uber-go/tally/m3.newResourcePool.func2
+      33MB 12.92% 57.76%       33MB 12.92%  github.com/uber-go/tally/m3/thrift.NewMetric
+         0     0% 57.76%    32.50MB 12.72%  github.com/uber-go/tally/m3.(*resourcePool).getMetric
+#+end_example
+*** inuse objects
+#+BEGIN_SRC shell :results output :exports both
+go tool pprof -inuse_objects -top -nodecount=10 -cum m3_3600k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_objects
+Time: Apr 19, 2019 at 4:25pm (PDT)
+Showing nodes accounting for 2242759, 37.33% of 6008478 total
+Dropped 2 nodes (cum <= 30042)
+Showing top 10 nodes out of 57
+      flat  flat%   sum%        cum   cum%
+     56443  0.94%  0.94%    4959878 82.55%  main.main.func1
+     45389  0.76%  1.69%    4447372 74.02%  github.com/uber-go/tally.(*scope).Counter
+    344074  5.73%  7.42%    4025140 66.99%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0%  7.42%    3681066 61.26%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+   1796853 29.91% 37.33%    3681066 61.26%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 37.33%    2545054 42.36%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 37.33%     922988 15.36%  github.com/uber-go/tally.(*counter).cachedReport
+         0     0% 37.33%     922988 15.36%  github.com/uber-go/tally.(*scope).cachedReport
+         0     0% 37.33%     922988 15.36%  github.com/uber-go/tally.(*scope).reportLoop
+         0     0% 37.33%     922988 15.36%  github.com/uber-go/tally.(*scope).reportLoopRun
+#+end_example
