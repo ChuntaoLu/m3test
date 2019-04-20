@@ -60,6 +60,7 @@ func main() {
 	}
 
 	flag.Parse()
+	log.SetOutput(os.Stdout)
 	log.Println("number of ops:", strconv.Itoa(*n)+"k")
 
 	ch := make(chan struct{}, concurrency)
