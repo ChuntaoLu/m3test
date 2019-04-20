@@ -4,5 +4,7 @@ github.com/apache/thrift v0.12.0 h1:ymFY8b00T66exzV1OxAnIA8mawFjPyH6l0wjuv8zTxY=
 github.com/apache/thrift v0.12.0/go.mod h1:cp2SuWMxlEZw2r+iP2GNCdIi4C1qmUzdZFSVb+bacwQ=
 github.com/uber-go/tally v3.3.7+incompatible h1:Mg2ahTypGX6ziZ7gjMqe2w+OSh75wTKODYm4fpdbncM=
 github.com/uber-go/tally v3.3.7+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
+github.com/uber-go/tally v3.3.9-0.20190405200941-532cc7e9fa0d+incompatible h1:VR7kcsc+IrgSST67DjtkGJTiExcsvGhei8c5Z59sbgY=
+github.com/uber-go/tally v3.3.9-0.20190405200941-532cc7e9fa0d+incompatible/go.mod h1:YDTIBxdXyOU/sCWilKB4bgyufu1cEi0jdVnRdxvjnmU=
 go.uber.org/atomic v1.3.2 h1:2Oa65PReHzfn29GpvgsYwloV9AVFHPDk8tYxt2c2tr4=
 go.uber.org/atomic v1.3.2/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=

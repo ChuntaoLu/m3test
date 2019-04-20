@@ -42,6 +42,7 @@ func main() {
 	scope, closer := tally.NewRootScope(
 		tally.ScopeOptions{
 			CachedReporter: reporter,
+			ExpiryPeriod:   time.Duration(2) * time.Second,
 		},
 		time.Duration(1000)*time.Millisecond,
 	)
