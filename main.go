@@ -16,7 +16,7 @@ import (
 const (
 	numCities   = 500
 	numDevics   = 100
-	numCounters = 10
+	numCounters = 1
 
 	concurrency = 100
 )
