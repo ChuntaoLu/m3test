@@ -59,7 +59,7 @@ func main() {
 		counters[i] = "counter" + strconv.Itoa(i)
 	}
 
-	sleepTime := time.Duration(100) * time.Microsecond
+	sleepTime := time.Duration(100) * time.Millisecond
 
 	flag.Parse()
 	log.SetOutput(os.Stdout)

@@ -178,6 +178,105 @@ ROUTINE ======================== github.com/uber-go/tally.(*scope).subscope in /
          .          .    432:	if s.baseReporter == nil {
 #+end_example
 
+* Run with different sleep time
+** Sleep 100 microseconds
+#+BEGIN_SRC shell :results output :exports both
+go build
+time ./m3test -n 200 2>&1
+#+END_SRC
+
+#+RESULTS:
+: 2019/04/20 11:16:25 number of tag permutations: 50000
+: 2019/04/20 11:16:25 number of counter names: 1
+: 2019/04/20 11:16:25 number of ops: 200k
+: 2019/04/20 11:16:25 sleep time per op: 100µs
+: 2019/04/20 11:16:26 number of counters: 49120
+:         1.43 real         3.70 user         1.50 sys
+
+#+BEGIN_SRC shell :results output :exports both
+go tool pprof -top -nodecount=10 -cum m3_200k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_space
+Time: Apr 20, 2019 at 11:16am (PDT)
+Showing nodes accounting for 47.79MB, 84.15% of 56.79MB total
+Showing top 10 nodes out of 27
+      flat  flat%   sum%        cum   cum%
+    0.50MB  0.88%  0.88%    54.79MB 96.48%  main.main.func1
+         0     0%  0.88%    31.29MB 55.09%  github.com/uber-go/tally.(*scope).Tagged
+       7MB 12.33% 13.21%       23MB 40.50%  github.com/uber-go/tally.(*scope).Counter
+   19.79MB 34.84% 48.05%    20.79MB 36.60%  github.com/uber-go/tally.(*scope).subscope
+       2MB  3.52% 51.57%       15MB 26.41%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 51.57%       13MB 22.89%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+       8MB 14.09% 65.66%       13MB 22.89%  github.com/uber-go/tally/m3.(*reporter).newMetric
+   10.50MB 18.49% 84.15%    10.50MB 18.49%  github.com/uber-go/tally.(*scope).copyAndSanitizeMap
+         0     0% 84.15%        5MB  8.80%  github.com/uber-go/tally.(*ObjectPool).Get
+         0     0% 84.15%        2MB  3.52%  github.com/uber-go/tally.(*ObjectPool).Init
+#+end_example
+
+** Sleep 100 milliseconds
+#+BEGIN_SRC shell :results output :exports both
+git diff main.go
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+diff --cc main.go
+index eca66c2,e3c85b8..0000000
+--- a/main.go
++++ b/main.go
+@@@ -59,8 -59,6 +59,8 @@@ func main()
+  		counters[i] = "counter" + strconv.Itoa(i)
+  	}
+
+- 	sleepTime := time.Duration(100) * time.Microsecond
+++	sleepTime := time.Duration(100) * time.Millisecond
+ +
+  	flag.Parse()
+  	log.SetOutput(os.Stdout)
+  	log.Println("number of tag permutations:", numCities*numDevics)
+#+end_example
+
+#+BEGIN_SRC shell :results output :exports both
+go build
+time ./m3test -n 200 2>&1
+#+END_SRC
+
+#+RESULTS:
+: 2019/04/20 11:19:26 number of tag permutations: 50000
+: 2019/04/20 11:19:26 number of counter names: 1
+: 2019/04/20 11:19:26 number of ops: 200k
+: 2019/04/20 11:19:26 sleep time per op: 100ms
+: 2019/04/20 11:22:51 number of counters: 49112
+:       204.88 real        16.51 user         6.16 sys
+
+#+BEGIN_SRC shell :results output :exports both
+go tool pprof -top -nodecount=10 -cum m3_200k.mprof
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Type: inuse_space
+Time: Apr 20, 2019 at 11:22am (PDT)
+Showing nodes accounting for 58.29MB, 80.47% of 72.45MB total
+Showing top 10 nodes out of 41
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%    65.29MB 90.13%  main.main.func1
+         0     0%     0%    41.29MB 57.00%  github.com/uber-go/tally.(*scope).Tagged
+   24.29MB 33.53% 33.53%    25.79MB 35.60%  github.com/uber-go/tally.(*scope).subscope
+      10MB 13.81% 47.33%       24MB 33.13%  github.com/uber-go/tally.(*scope).Counter
+   15.50MB 21.40% 68.73%    15.50MB 21.40%  github.com/uber-go/tally.(*scope).copyAndSanitizeMap
+       1MB  1.38% 70.11%    12.50MB 17.26%  github.com/uber-go/tally/m3.(*reporter).AllocateCounter
+         0     0% 70.11%    11.50MB 15.87%  github.com/uber-go/tally/m3.(*reporter).allocateCounter
+    7.50MB 10.35% 80.47%    11.50MB 15.87%  github.com/uber-go/tally/m3.(*reporter).newMetric
+         0     0% 80.47%     6.65MB  9.18%  runtime.main
+         0     0% 80.47%     4.50MB  6.21%  github.com/uber-go/tally.(*ObjectPool).Get
+#+end_example
+** conclusion
+Regarding inuse memeory, qps does not really matter, it is the number of counters that matters.
+
 * Questions
 - [[https://github.com/uber-go/tally/blob/master/reporter.go#L80][tally doc here]] says =CachedReporter= is more performant, is it regarding throughput?
 - It seems like =CachedReporter= has heavy memory footprint when an application emit metrics with high cardinality of tags, what is a better alternative?
