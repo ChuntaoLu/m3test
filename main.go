@@ -59,9 +59,14 @@ func main() {
 		counters[i] = "counter" + strconv.Itoa(i)
 	}
 
+	sleepTime := time.Duration(100) * time.Microsecond
+
 	flag.Parse()
 	log.SetOutput(os.Stdout)
+	log.Println("number of tag permutations:", numCities*numDevics)
+	log.Println("number of counter names:", numCounters)
 	log.Println("number of ops:", strconv.Itoa(*n)+"k")
+	log.Println("sleep time per op:", sleepTime)
 
 	ch := make(chan struct{}, concurrency)
 	count := 0
@@ -72,8 +77,7 @@ func main() {
 				"city":   cities[rand.Intn(numCities)],
 				"device": devices[rand.Intn(numDevics)],
 			}
-			// assume it takes 100ms to do work
-			time.Sleep(time.Duration(100) * time.Microsecond)
+			time.Sleep(sleepTime)
 			scope.Tagged(tags).Counter(counters[rand.Intn(numCounters)]).Inc(1)
 			<-ch
 		}()
